@@ -3,8 +3,12 @@
 #include "memlayout.h"
 #include "riscv.h"
 #include "spinlock.h"
+#include "sleeplock.h"
 #include "proc.h"
+#include "mutex.h"
 #include "defs.h"
+
+extern struct mutex mutex[NMUTEX];
 
 struct cpu cpus[NCPU];
 
@@ -55,6 +59,7 @@ procinit(void)
       initlock(&p->lock, "proc");
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
+      memset((void*)p->mutex, 0, NMUTEX * sizeof(int));
   }
 }
 
@@ -169,6 +174,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  
+  memset((void*)p->mutex, 0, NMUTEX * sizeof(int));
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -308,6 +315,20 @@ fork(void)
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
 
+  // increment reference counts on mutex
+  for (i = 0; i < NMUTEX; ++i) {
+  	acquire(&p->lock);
+  	if (p->mutex[i]) {
+  		acquire(&mutex[i].splock);
+  		++mutex[i].nlink;
+  		release(&mutex[i].splock);
+  	}
+  	release(&p->lock);
+  }
+
+  // copy mutex descriptors table
+  safestrcpy((char*)np->mutex, (char*)p->mutex, NMUTEX * sizeof(int));
+	
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -358,6 +379,13 @@ exit(int status)
       fileclose(f);
       p->ofile[fd] = 0;
     }
+  }
+
+  // release mutexes
+  for (int i = 0; i < NMUTEX; ++i) {
+  	acquire(&p->lock);
+  	if (p->mutex[i]) rmutex(i);
+  	release(&p->lock);
   }
 
   begin_op();

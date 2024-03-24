@@ -36,3 +36,7 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+entry("cmutex");
+entry("rmutex");
+entry("lock");
+entry("unlock");
