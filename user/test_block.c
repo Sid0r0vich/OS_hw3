@@ -21,7 +21,8 @@ int main(int argc, char* argv[]) {
 		fprintf(2, "mutex error!\n");
 		exit(1);
 	}
-	
+
+	int mres = 0;
 	int pid = fork();
 	if (pid > 0) {
 		close(p1[0]);
@@ -39,9 +40,17 @@ int main(int argc, char* argv[]) {
 			res = read(p2[0], &c, 1);
 			if (res <= 0) break;
 
-			lock(md);
+			mres = lock(md);
+			if (mres < 0) {
+				fprintf(2, "lock error!\n");
+				break;
+			}
 			printf("%d: recieved %c\n", getpid(), c);
-			unlock(md);
+			mres = unlock(md);
+			if (mres < 0) {
+				fprintf(2, "unlock error!\n");
+				break;
+			}
 		}
 		close(p2[0]);
 
@@ -61,9 +70,17 @@ int main(int argc, char* argv[]) {
 			res = read(p1[0], &c, 1);
 			if (res <= 0) break;
 
-			lock(md);
+			mres = lock(md);
+			if (mres < 0) {
+				fprintf(2, "lock error!\n");
+				break;
+			}
 			printf("%d: recieved %c\n", getpid(), c);
-			unlock(md);
+			mres = unlock(md);
+			if (mres < 0) {
+				fprintf(2, "unlock error!\n");
+				break;
+			}
 
 			res = write(p2[1], &c, 1);
 			if (res < 0) {

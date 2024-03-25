@@ -106,8 +106,22 @@ sys_lock(void) {
 	acquire(&p->lock);
 	struct mutex* mx = p->mutex[md];
 	release(&p->lock);
+
+	if (mx == 0) return -1;
 	
 	acquire(&mx->splock);
+	int mpid = mx->pid;
+	release(&mx->splock);
+	acquire(&p->lock);
+	int pid = p->pid;
+	release(&p->lock);
+	
+	acquire(&mx->splock);
+
+	if (mpid == pid && mx->locked) {
+		release(&mx->splock);
+		return -1;
+	}
 
 	mx->locked = 1;
 
@@ -129,8 +143,22 @@ sys_unlock(void) {
 	acquire(&p->lock);
 	struct mutex* mx = p->mutex[md];
 	release(&p->lock);
+
+	if (mx == 0) return -1;
 	
 	acquire(&mx->splock);
+	int mpid = mx->pid;
+	release(&mx->splock);
+	acquire(&p->lock);
+	int pid = p->pid;
+	release(&p->lock);
+	
+	acquire(&mx->splock);
+
+	if (mpid == pid && !mx->locked) {
+		release(&mx->splock);
+		return -1;
+	}
 
 	mx->locked = 0;
 	mx->pid = 0;
