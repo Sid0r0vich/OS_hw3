@@ -109,20 +109,14 @@ sys_lock(void) {
 	
 	acquire(&mx->splock);
 
-	if (mx->locked) {
-		release(&mx->splock);
-		return -1;
-	}
-
 	mx->locked = 1;
 
 	acquire(&p->lock);
 	mx->pid = p->pid;
 	release(&p->lock);
 	
-	acquiresleep(&mx->sllock);
-	
 	release(&mx->splock);
+	acquiresleep(&mx->sllock);
 	return 0;
 }
 
@@ -138,15 +132,10 @@ sys_unlock(void) {
 	
 	acquire(&mx->splock);
 
-	if (!mx->locked) {
-		release(&mx->splock);
-		return -1;
-	}
-
 	mx->locked = 0;
 	mx->pid = 0;
-	releasesleep(&mx->sllock);
 	
 	release(&mx->splock);
+	releasesleep(&mx->sllock);
 	return 0;
 }

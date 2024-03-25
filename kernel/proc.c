@@ -316,18 +316,18 @@ fork(void)
   np->cwd = idup(p->cwd);
 
   // increment reference counts on mutex
-  for (i = 0; i < NMUTEXPROC; ++i) {
+  for (i = 0; i < NMUTEX; ++i) {
   	acquire(&p->lock);
   	if (p->mutex[i]) {
-  		acquire(&p->mutex[i]->splock);
-  		++p->mutex[i]->nlink;
-  		release(&p->mutex[i]->splock);
+  		acquire(&mutex[i].splock);
+  		++mutex[i].nlink;
+  		release(&mutex[i].splock);
   	}
   	release(&p->lock);
   }
 
   // copy mutex descriptors table
-  safestrcpy((char*)np->mutex, (char*)p->mutex, NMUTEXPROC * sizeof(struct mutex*));
+  safestrcpy((char*)np->mutex, (char*)p->mutex, NMUTEX * sizeof(int));
 	
   safestrcpy(np->name, p->name, sizeof(p->name));
 
@@ -382,10 +382,16 @@ exit(int status)
   }
 
   // release mutexes
-  for (int i = 0; i < NMUTEXPROC; ++i) {
+  for (int i = 0; i < NMUTEX; ++i) {
+  	// printf("before %d\n", i);
+  	
   	acquire(&p->lock);
-  	if (p->mutex[i]) rmutex(i);
-  	release(&p->lock);
+  	int res = p->mutex[i] != 0;
+   	release(&p->lock);
+   	
+  	if (res) rmutex(i);
+  	
+  	// printf("after %d\n", i);
   }
 
   begin_op();
@@ -398,7 +404,7 @@ exit(int status)
   // Give any children to init.
   reparent(p);
 
-  // Parent might be sleeping in wait().
+  // Parent might be sleeping in wait().[<64;48;8M]
   wakeup(p->parent);
   
   acquire(&p->lock);

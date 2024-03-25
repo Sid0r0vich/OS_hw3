@@ -1,5 +1,8 @@
 #include "kernel/types.h"
 #include "user.h"
+#include "kernel/spinlock.h"
+#include "kernel/sleeplock.h"
+#include "kernel/mutex.h"
 
 int main(int argc, char* argv[]) {
 	if (argc <= 1) exit(1);
@@ -13,6 +16,12 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
+	int md = cmutex();
+	if (md < 0) {
+		fprintf(2, "mutex error!\n");
+		exit(1);
+	}
+	
 	int pid = fork();
 	if (pid > 0) {
 		close(p1[0]);
@@ -30,13 +39,17 @@ int main(int argc, char* argv[]) {
 			res = read(p2[0], &c, 1);
 			if (res <= 0) break;
 
-			printf("recieved: %c\n", c);
+			lock(md);
+			printf("%d: recieved %c\n", getpid(), c);
+			unlock(md);
 		}
 		close(p2[0]);
 
 		if (res < 0) {
 			fprintf(2, "read error!");
 		}
+
+		wait((int*)0);
 	} 
 	else if (pid == 0) {
 		close(p1[1]);
@@ -48,7 +61,9 @@ int main(int argc, char* argv[]) {
 			res = read(p1[0], &c, 1);
 			if (res <= 0) break;
 
-			printf("recieved: %c\n", c);
+			lock(md);
+			printf("%d: recieved %c\n", getpid(), c);
+			unlock(md);
 
 			res = write(p2[1], &c, 1);
 			if (res < 0) {
@@ -67,5 +82,6 @@ int main(int argc, char* argv[]) {
 		fprintf(2, "fork error!\n");
 		exit(1);
 	}
-}
 
+	return 0;
+}
