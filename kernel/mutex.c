@@ -29,18 +29,28 @@ sys_cmutex(void) {
 	for (mx = mutex; mx < &mutex[NMUTEX]; ++mx) {
 		acquire(&mx->splock);
 
-		if (!mx->is_used) {
-			mx->is_used = 1;
-			mx->nlink = 1;
-			
+		if (!mx->is_used) {			
 			struct proc* p = myproc();
-			acquire(&p->lock);
-			p->mutex[mx - mutex] = 1;
-			release(&p->lock);
+			int i;
+			for (i = 0; i < NMUTEXPROC; ++i) {
+				acquire(&p->lock);
+
+				if (p->mutex[i] == 0) {
+					p->mutex[i] = mx;
+					mx->is_used = 1;
+					mx->nlink = 1;
+					release(&p->lock);
+					break;
+				}
+
+				release(&p->lock);
+			};
 			
 			release(&mx->splock);
+
+			if (i == NMUTEXPROC) return -1;
 			
-			return mx - mutex;
+			return i;
 		}
 		
 		release(&mx->splock);
@@ -59,27 +69,31 @@ sys_rmutex(void) {
 
 int
 rmutex(int md) {
-	acquire(&mutex[md].splock);
-
-	if (mutex[md].locked) {
-		release(&mutex[md].splock);
-		return -1;
-	}
-	
 	struct proc* p = myproc();
 	acquire(&p->lock);
-	if (p->mutex[md] == 0) {
-		release(&p->lock);
+	struct mutex* mx = p->mutex[md];
+	release(&p->lock);
+
+	if (mx == 0) {
 		return -1;
 	}
+
+	acquire(&mx->splock);
+
+	if (mx->locked) {
+		release(&mx->splock);
+		return -1;
+	}
+
+	acquire(&p->lock);
 	p->mutex[md] = 0;
 	release(&p->lock);
 
-	--mutex[md].nlink;
+	--mx->nlink;
 	
-	if (!mutex[md].nlink) mutex[md].is_used = 0;
+	if (!mx->nlink) mx->is_used = 0;
 
-	release(&mutex[md].splock);
+	release(&mx->splock);
 	return 0;
 }
 
@@ -87,24 +101,28 @@ uint64
 sys_lock(void) {
 	int md;
 	argint(0, &md);
-	
-	acquire(&mutex[md].splock);
-
-	if (mutex[md].locked) {
-		release(&mutex[md].splock);
-		return -1;
-	}
-
-	mutex[md].locked = 1;
 
 	struct proc* p = myproc();
 	acquire(&p->lock);
-	mutex[md].pid = p->pid;
+	struct mutex* mx = p->mutex[md];
 	release(&p->lock);
 	
-	acquiresleep(&mutex[md].sllock);
+	acquire(&mx->splock);
+
+	if (mx->locked) {
+		release(&mx->splock);
+		return -1;
+	}
+
+	mx->locked = 1;
+
+	acquire(&p->lock);
+	mx->pid = p->pid;
+	release(&p->lock);
 	
-	release(&mutex[md].splock);
+	acquiresleep(&mx->sllock);
+	
+	release(&mx->splock);
 	return 0;
 }
 
@@ -112,22 +130,23 @@ uint64
 sys_unlock(void) {
 	int md;
 	argint(0, &md);
-	
-	acquire(&mutex[md].splock);
 
 	struct proc* p = myproc();
 	acquire(&p->lock);
-	if (!mutex[md].locked || mutex[md].pid != p->pid) {
-		release(&p->lock);
-		release(&mutex[md].splock);
+	struct mutex* mx = p->mutex[md];
+	release(&p->lock);
+	
+	acquire(&mx->splock);
+
+	if (!mx->locked) {
+		release(&mx->splock);
 		return -1;
 	}
-	release(&p->lock);
 
-	mutex[md].locked = 0;
-	mutex[md].pid = 0;
-	releasesleep(&mutex[md].sllock);
+	mx->locked = 0;
+	mx->pid = 0;
+	releasesleep(&mx->sllock);
 	
-	release(&mutex[md].splock);
+	release(&mx->splock);
 	return 0;
 }

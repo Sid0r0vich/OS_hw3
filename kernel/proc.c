@@ -316,18 +316,18 @@ fork(void)
   np->cwd = idup(p->cwd);
 
   // increment reference counts on mutex
-  for (i = 0; i < NMUTEX; ++i) {
+  for (i = 0; i < NMUTEXPROC; ++i) {
   	acquire(&p->lock);
   	if (p->mutex[i]) {
-  		acquire(&mutex[i].splock);
-  		++mutex[i].nlink;
-  		release(&mutex[i].splock);
+  		acquire(&p->mutex[i]->splock);
+  		++p->mutex[i]->nlink;
+  		release(&p->mutex[i]->splock);
   	}
   	release(&p->lock);
   }
 
   // copy mutex descriptors table
-  safestrcpy((char*)np->mutex, (char*)p->mutex, NMUTEX * sizeof(int));
+  safestrcpy((char*)np->mutex, (char*)p->mutex, NMUTEXPROC * sizeof(struct mutex*));
 	
   safestrcpy(np->name, p->name, sizeof(p->name));
 
@@ -382,7 +382,7 @@ exit(int status)
   }
 
   // release mutexes
-  for (int i = 0; i < NMUTEX; ++i) {
+  for (int i = 0; i < NMUTEXPROC; ++i) {
   	acquire(&p->lock);
   	if (p->mutex[i]) rmutex(i);
   	release(&p->lock);
